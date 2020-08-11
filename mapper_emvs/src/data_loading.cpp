@@ -20,20 +20,27 @@ void parse_rosbag(const std::string &rosbag,
                   const double tmax)
 {
   std::vector<std::string> topics;
-  topics.push_back(event_topic);
-  topics.push_back(camera_info_topic);
-  topics.push_back(pose_topic);
+  std::string my_event_topic = "/dvs_corner_events_soft";
+  std::string my_info_topic = "/dvs/camera_info";
+  std::string my_pose_topic = "/UR_driver_pose";
+
+  topics.push_back(my_event_topic);
+  topics.push_back(my_info_topic);
+  topics.push_back(my_pose_topic);
 
   poses_.clear();
   events_.clear();
 
+  std::cout << "topics: " << topics[0] << topics[1] << topics[2] << std::endl;
+
   rosbag::Bag  bag(rosbag, rosbag::bagmode::Read);
-  rosbag::View view(bag, rosbag::TopicQuery(topics));
+  // rosbag::View view(bag, rosbag::TopicQuery(topics));
+  rosbag::View view(bag);
 
   bool continue_looping_through_bag = true;
   bool got_initial_stamp = false;
   ros::Time initial_timestamp;
-
+  int iterator = 0;
   BOOST_FOREACH(rosbag::MessageInstance const m, view)
   {
     if(!continue_looping_through_bag)
@@ -43,10 +50,18 @@ void parse_rosbag(const std::string &rosbag,
 
     const std::string& topic_name = m.getTopic();
     VLOG(2) << topic_name;
-
+    //std::cout << "Topic name:" << topic_name << std::endl;
+    
     // Events
+    
     if (topic_name == topics[0])
     {
+      if (iterator<4)
+      {
+        iterator++;
+        continue;
+      }
+      std::cout << "event msg" << std::endl;
       dvs_msgs::EventArray::ConstPtr msg = m.instantiate<dvs_msgs::EventArray>();
       if (msg != NULL)
       {
@@ -55,7 +70,7 @@ void parse_rosbag(const std::string &rosbag,
           continue;
         }
         const ros::Time& stamp = msg->events[0].ts;
-
+        std::cout << "stamp = " << stamp << std::endl;
         if(!got_initial_stamp)
         {
           initial_timestamp = stamp;
@@ -66,12 +81,17 @@ void parse_rosbag(const std::string &rosbag,
         for (size_t i = 0; i < msg->events.size(); ++i)
         {
           const double rel_stamp = (msg->events[i].ts - initial_timestamp).toSec();
+          std::cout << "initial_timestamp = " << initial_timestamp<< std::endl;
+          std::cout << "rel_stamp = " << rel_stamp << std::endl;
+          std::cout << "Event timestamp = " << msg->events[i].ts << std::endl;
           if(rel_stamp < tmin)
           {
             continue;
           }
           if(rel_stamp > tmax)
           {
+            std::cout << "rel_stamp_in_if_statement= " << rel_stamp << std::endl;
+            std::cout << "Event timestamp in if statement= " << msg->events[i].ts << std::endl;
             continue_looping_through_bag = false;
           }
 
@@ -81,16 +101,20 @@ void parse_rosbag(const std::string &rosbag,
         }
       }
     }
+    
+    
 
     // Camera Info
     if (topic_name == topics[1])
     {
+      std::cout << "camera_info_msg" << std::endl;
       camera_info_msg = *(m.instantiate<sensor_msgs::CameraInfo>());
     }
 
     // Pose
     if (topic_name == topics[2])
     {
+      std::cout << "pose msg" << std::endl;
       const geometry_msgs::PoseStamped pose_msg
           = *(m.instantiate<geometry_msgs::PoseStamped>());
       const ros::Time& stamp = pose_msg.header.stamp;
@@ -100,6 +124,7 @@ void parse_rosbag(const std::string &rosbag,
         LOG(INFO) << "Initial stamp: " << stamp;
         got_initial_stamp = true;
       }
+      
       const double rel_stamp = (stamp - initial_timestamp).toSec();
       if(rel_stamp < tmin)
       {
@@ -109,7 +134,6 @@ void parse_rosbag(const std::string &rosbag,
       {
         continue_looping_through_bag = false;
       }
-
       const Eigen::Vector3d position(pose_msg.pose.position.x,
                                      pose_msg.pose.position.y,
                                      pose_msg.pose.position.z);
