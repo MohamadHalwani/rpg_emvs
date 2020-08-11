@@ -13,8 +13,8 @@
 
 // Input parameters
 DEFINE_string(bag_filename, "input.bag", "Path to the rosbag");
-DEFINE_string(event_topic, "/dvs/events", "Name of the event topic (default: /dvs/events)");
-DEFINE_string(pose_topic, "/optitrack/davis", "Name of the pose topic (default: /optitrack/davis)");
+DEFINE_string(event_topic, "/dvs_corner_events_soft", "Name of the event topic (default: /dvs/events)");
+DEFINE_string(pose_topic, "/ur10_pose", "Name of the pose topic (default: /optitrack/davis)");
 DEFINE_string(camera_info_topic, "/dvs/camera_info", "Name of the camera info topic (default: /dvs/camera_info)");
 DEFINE_double(start_time_s, 0.0, "Start time in seconds (default: 0.0)");
 DEFINE_double(stop_time_s, 1000.0, "Stop time in seconds (default: 1000.0)");
@@ -57,9 +57,11 @@ int main(int argc, char** argv)
   std::map<ros::Time, geometry_utils::Transformation> poses;
   data_loading::parse_rosbag(FLAGS_bag_filename, events, poses, camera_info_msg,
                              FLAGS_event_topic, FLAGS_camera_info_topic, FLAGS_pose_topic, FLAGS_start_time_s, FLAGS_stop_time_s);
-
+  
   // Create a camera object from the loaded intrinsic parameters
   image_geometry::PinholeCameraModel cam;
+  // camera_info_msg.width = 240;
+  // camera_info_msg.height = 180;
   cam.fromCameraInfo(camera_info_msg);
 
   // Use linear interpolation to compute the camera pose for each event
@@ -73,7 +75,7 @@ int main(int argc, char** argv)
   geometry_utils::Transformation T_w_rv;
   trajectory.getPoseAt(ros::Time(0.5 * (t0_.toSec() + t1_.toSec())), T_w_rv);
   geometry_utils::Transformation T_rv_w = T_w_rv.inverse();
-
+  
   // Initialize the DSI
   CHECK_LE(FLAGS_dimZ, 256) << "Number of depth planes should be <= 256";
   EMVS::ShapeDSI dsi_shape(FLAGS_dimX, FLAGS_dimY, FLAGS_dimZ,
