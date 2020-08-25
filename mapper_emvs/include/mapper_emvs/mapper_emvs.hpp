@@ -66,6 +66,7 @@ struct OptionsPointCloud
   // Outlier removal parameters
   float radius_search_;
   int min_num_neighbors_;
+  
 };
 
 
@@ -126,7 +127,7 @@ private:
   // Precomputed (normalized) bearing vectors for each pixel of the reference image
   Eigen::Matrix2Xf precomputed_rectified_points_;
 
-  const size_t packet_size_ = 1024;
+  const size_t packet_size_ = 246;
 
 };
 
