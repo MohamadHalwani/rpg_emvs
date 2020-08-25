@@ -11,10 +11,14 @@
 
 #include <chrono>
 
+#include "ros/ros.h"
+#include "std_msgs/String.h"
+
+
 // Input parameters
 DEFINE_string(bag_filename, "input.bag", "Path to the rosbag");
-DEFINE_string(event_topic, "/dvs_corner_events_soft", "Name of the event topic (default: /dvs/events)");
-DEFINE_string(pose_topic, "/ur10_pose", "Name of the pose topic (default: /optitrack/davis)");
+DEFINE_string(event_topic, "/dvs/events", "Name of the event topic (default: /dvs/events)");
+DEFINE_string(pose_topic, "/optitrack/davis", "Name of the pose topic (default: /optitrack/davis)");
 DEFINE_string(camera_info_topic, "/dvs/camera_info", "Name of the camera info topic (default: /dvs/camera_info)");
 DEFINE_double(start_time_s, 0.0, "Start time in seconds (default: 0.0)");
 DEFINE_double(stop_time_s, 1000.0, "Stop time in seconds (default: 1000.0)");
@@ -45,6 +49,9 @@ DEFINE_int32(min_num_neighbors, 3, "Minimum number of points for the radius filt
  */
 int main(int argc, char** argv)
 {
+  //ros::init(argc, argv, "emvs");
+ // ros::NodeHandle nh_;
+  
   google::InitGoogleLogging(argv[0]);
   google::ParseCommandLineFlags(&argc, &argv, true);
   google::InstallFailureSignalHandler();
@@ -75,6 +82,7 @@ int main(int argc, char** argv)
   geometry_utils::Transformation T_w_rv;
   trajectory.getPoseAt(ros::Time(0.5 * (t0_.toSec() + t1_.toSec())), T_w_rv);
   geometry_utils::Transformation T_rv_w = T_w_rv.inverse();
+  //geometry_utils::Transformation T_rv_w = T1_.inverse();
   
   // Initialize the DSI
   CHECK_LE(FLAGS_dimZ, 256) << "Number of depth planes should be <= 256";
@@ -142,6 +150,12 @@ int main(int argc, char** argv)
   // Save point cloud to disk
   pcl::io::savePCDFileASCII ("pointcloud.pcd", *pc);
   LOG(INFO) << "Saved " << pc->points.size () << " data points to pointcloud.pcd";
-  
+  for (int i=0; i< pc->points.size(); i++)
+  {
+    ROS_INFO("point %d, x: %f, y: %f, z: %f", i, pc->points[i].x, pc->points[i].y, pc->points[i].z);
+  }
+  //ros::Publisher point_cloud_pub = nh_.advertise<EMVS::PointCloud::Ptr>("/emvs_point_cloud", 1);
+ // point_cloud_pub.publish(pc->points[i].x,);
+  //ros::spin();
   return 0;
 }
