@@ -12,12 +12,18 @@ MapperEMVS::MapperEMVS(const image_geometry::PinholeCameraModel& cam,
   , dsi_shape_(dsi_shape)
 {
   cv::Size full_resolution = cam.fullResolution();
-  width_ = full_resolution.width;
-  height_ = full_resolution.height;
+  width_ = full_resolution.width;//346
+  height_ = full_resolution.height;//260
 
   K_ << dvs_cam_.fx(), 0.f, dvs_cam_.cx(),
-      0.f, dvs_cam_.fy(), dvs_cam_.cy(),
-      0.f, 0.f, 1.f;
+       0.f, dvs_cam_.fy(), dvs_cam_.cy(),
+       0.f, 0.f, 1.f;
+  // K_ << (float) 206.29417, 0.f          , (float) 115.647026,
+  //         0.f        , (float) 206.3225  , (float) 83.69464,
+  //         0.f        , 0.f          ,  1.f;
+
+  std::cout << K_ << std::endl;
+
 
   setupDSI();
 
@@ -58,7 +64,7 @@ bool MapperEMVS::evaluateDSI(const std::vector<dvs_msgs::Event>& events,
       current_event_++;
       continue;
     }
-
+    // from event camera to reference viewpoint
     T_rv_ev = T_rv_w * T_w_ev;
 
     const Transformation T_ev_rv = T_rv_ev.inverse();
@@ -176,7 +182,7 @@ void MapperEMVS::setupDSI()
 
   dsi_shape_.dimX_ = (dsi_shape_.dimX_ > 0) ? dsi_shape_.dimX_ : dvs_cam_.fullResolution().width;
   dsi_shape_.dimY_ = (dsi_shape_.dimY_ > 0) ? dsi_shape_.dimY_ : dvs_cam_.fullResolution().height;
-
+  
   float f_virtual_cam_;
   if (dsi_shape_.fov_ < 10.f)
   {
@@ -193,7 +199,7 @@ void MapperEMVS::setupDSI()
   virtual_cam_ = PinholeCamera(dsi_shape_.dimX_, dsi_shape_.dimY_,
                                f_virtual_cam_, f_virtual_cam_,
                                0.5 * (float)dsi_shape_.dimX_, 0.5 * (float)dsi_shape_.dimY_);
-  
+    
   dsi_ = Grid3D(dsi_shape_.dimX_, dsi_shape_.dimY_, dsi_shape_.dimZ_);
 }
 
@@ -206,7 +212,8 @@ void MapperEMVS::precomputeRectifiedPoints()
   {
     for(int x=0; x < width_; ++x)
     {
-      cv::Point2d rectified_point = dvs_cam_.rectifyPoint(cv::Point2d(x,y));
+      cv::Point2d rectified_point = dvs_cam_.rectifyPoint(cv::Point2d(x,y));//cv::Point2d(x,y);
+      //cv::Point2d rectified_point = cv::Point2d(x,y);
       precomputed_rectified_points_.col(y * width_ + x) = Eigen::Vector2f(rectified_point.x, rectified_point.y);
     }
   }
