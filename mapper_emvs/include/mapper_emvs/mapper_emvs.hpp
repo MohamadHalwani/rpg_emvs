@@ -5,11 +5,30 @@
 #include <mapper_emvs/trajectory.hpp>
 #include <mapper_emvs/depth_vector.hpp>
 
-#include <dvs_msgs/Event.h>
 #include <image_geometry/pinhole_camera_model.h>
+#include <dvs_msgs/Event.h>
+#include <geometry_msgs/PoseStamped.h>
+#include "geometry_msgs/Pose.h"
 
+//#include <geometry_msgs/PoseStamped.h>
+#include <Eigen/Geometry> 
+#include <pcl/common/common_headers.h>
 #include <pcl/point_types.h>
 #include <pcl_ros/point_cloud.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl/point_types.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/pcl_base.h>
+#include <pcl/visualization/pcl_visualizer.h>
+#include <pcl/ModelCoefficients.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/visualization/cloud_viewer.h>
+#include <pcl/filters/extract_indices.h>
+
+#include <vtkAutoInit.h>
+#include<math.h> 
 
 namespace EMVS {
 
@@ -91,7 +110,12 @@ public:
                             const cv::Mat& mask,
                             const OptionsPointCloud &options_pc,
                             PointCloud::Ptr &pc_);
-  
+
+  void PCtoVoxelGrid(PointCloud::Ptr cloud, PointCloud::Ptr cloud_filtered);
+
+  void FitPlanetoPC(PointCloud::Ptr cloud_filtered, PointCloud::Ptr cloud_p, geometry_utils::Transformation last_pose);
+  void PlaneRotation(pcl::ModelCoefficients::Ptr coefficients, Eigen::Vector4f Quat, geometry_utils::Transformation last_pose);
+  void PlaneinInertial(Eigen::Vector4f PlaneQuatInertial, geometry_utils::Transformation last_pose, Eigen::Vector4f Quat);
   Grid3D dsi_;
   
 
