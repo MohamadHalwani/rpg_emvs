@@ -4,10 +4,20 @@
 #include <image_geometry/pinhole_camera_model.h>
 
 #include <opencv2/highgui/highgui.hpp>
+#include <pcl/common/common_headers.h>
 #include <pcl/io/pcd_io.h>
+#include <pcl/point_types.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/pcl_base.h>
+#include <pcl/visualization/pcl_visualizer.h>
+#include <pcl/ModelCoefficients.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/visualization/cloud_viewer.h>
+#include <pcl/filters/extract_indices.h>
 
-#include <gflags/gflags.h>
-#include <glog/logging.h>
+#include <vtkAutoInit.h>
 
 #include <chrono>
 
@@ -64,7 +74,8 @@ int main(int argc, char** argv)
   std::map<ros::Time, geometry_utils::Transformation> poses;
   data_loading::parse_rosbag(FLAGS_bag_filename, events, poses, camera_info_msg,
                              FLAGS_event_topic, FLAGS_camera_info_topic, FLAGS_pose_topic, FLAGS_start_time_s, FLAGS_stop_time_s);
-  
+ 
+
   // Create a camera object from the loaded intrinsic parameters
   image_geometry::PinholeCameraModel cam;
   // camera_info_msg.width = 240;
@@ -150,12 +161,29 @@ int main(int argc, char** argv)
   // Save point cloud to disk
   pcl::io::savePCDFileASCII ("pointcloud.pcd", *pc);
   LOG(INFO) << "Saved " << pc->points.size () << " data points to pointcloud.pcd";
-  for (int i=0; i< pc->points.size(); i++)
+  // for (int i=0; i< pc->points.size(); i++)
+  // {
+  //   ROS_INFO("point %d, x: %f, y: %f, z: %f", i, pc->points[i].x, pc->points[i].y, pc->points[i].z);
+  // }
+
+  // Convert Point Clouds to Voxel Grid
+
+  EMVS::PointCloud::Ptr cloud_filtered (new EMVS::PointCloud);
+  mapper.PCtoVoxelGrid(pc, cloud_filtered); 
+  
+  for (int i=0; i< cloud_filtered->points.size(); i++)
   {
-    ROS_INFO("point %d, x: %f, y: %f, z: %f", i, pc->points[i].x, pc->points[i].y, pc->points[i].z);
+    ROS_INFO("point %d, x: %f, y: %f, z: %f", i, cloud_filtered->points[i].x, cloud_filtered->points[i].y, cloud_filtered->points[i].z);
   }
+
+  EMVS::PointCloud::Ptr cloud_p (new EMVS::PointCloud);
+  geometry_utils::Transformation last_pose = poses.at(t1_);
+  mapper.FitPlanetoPC(cloud_filtered, cloud_p, last_pose);
+
+  
+
   //ros::Publisher point_cloud_pub = nh_.advertise<EMVS::PointCloud::Ptr>("/emvs_point_cloud", 1);
- // point_cloud_pub.publish(pc->points[i].x,);
+  // point_cloud_pub.publish(pc->points[i].x,);
   //ros::spin();
   return 0;
 }
