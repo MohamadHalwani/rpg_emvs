@@ -1,7 +1,7 @@
 #include <mapper_emvs/mapper_emvs.hpp>
 #include <mapper_emvs/median_filtering.hpp>
 #include <pcl/filters/radius_outlier_removal.h>
-
+#include <geometry_msgs/PoseStamped.h>
 namespace EMVS {
 
 using namespace geometry_utils;
@@ -328,6 +328,119 @@ void MapperEMVS::getPointcloud(const cv::Mat& depth_map,
   outlier_rm.filter(*cloud_filtered);
 
   pc_->swap(*cloud_filtered);
+}
+
+void MapperEMVS::PCtoVoxelGrid(PointCloud::Ptr cloud, PointCloud::Ptr cloud_filtered)
+{
+ 
+  std::cerr << "PointCloud before filtering: " << cloud->width * cloud->height 
+       << " data points (" << pcl::getFieldsList (*cloud) << ")." << std::endl;
+
+  // Create the filtering object
+  pcl::VoxelGrid<PointType> sor;
+  sor.setInputCloud (cloud);
+  sor.setLeafSize (0.2f, 0.2f, 0.2f);
+  sor.filter (*cloud_filtered);
+
+  std::cerr << "PointCloud after filtering: " << cloud_filtered->width * cloud_filtered->height 
+       << " data points (" << pcl::getFieldsList (*cloud_filtered) << ")." << std::endl;
+
+  pcl::PCDWriter writer;
+  writer.write ("Voxel.pcd", *cloud_filtered, false);
+}
+
+void MapperEMVS::FitPlanetoPC(PointCloud::Ptr cloud_filtered, PointCloud::Ptr cloud_p, geometry_utils::Transformation last_pose)
+{
+  
+  pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
+  pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
+  
+  // Create the segmentation object
+  pcl::SACSegmentation<PointType> seg;
+  seg.setModelType (pcl::SACMODEL_PLANE);
+  seg.setMethodType (pcl::SAC_RANSAC);
+  seg.setDistanceThreshold (0.01);
+  seg.setInputCloud (cloud_filtered);
+  seg.segment (*inliers, *coefficients);
+
+  if (inliers->indices.size () == 0)
+  {
+    PCL_ERROR ("Could not estimate a planar model for the given dataset.");
+  }
+
+  Eigen::Vector4f plane_parameters;
+  pcl::ModelCoefficients plane_coeff; 
+  plane_coeff.values.resize (4);
+  plane_coeff.values[0] =  coefficients->values[0]; 
+  plane_coeff.values[1] =  coefficients->values[1]; 
+  plane_coeff.values[2] =  coefficients->values[2]; 
+  plane_coeff.values[3] =  coefficients->values[3]; 
+
+  std::cerr << "Model coefficients: " << coefficients->values[0] << " " 
+                                      << coefficients->values[1] << " "
+                                      << coefficients->values[2] << " " 
+                                      << coefficients->values[3] << std::endl;
+
+  std::cerr << "Model inliers: " << inliers->indices.size () << std::endl;
+  for (std::size_t i = 0; i < inliers->indices.size (); ++i)
+  for (const auto& idx: inliers->indices)
+  std::cerr << idx << "    " << cloud_filtered->points[idx].x << " "
+                               << cloud_filtered->points[idx].y << " "
+                               << cloud_filtered->points[idx].z << std::endl;
+  
+  // Find the rotation vector of the plane
+  Eigen::Vector4f RotationVectortoQuat;                
+  PlaneRotation(coefficients, RotationVectortoQuat, last_pose);
+}
+
+void MapperEMVS::PlaneRotation(pcl::ModelCoefficients::Ptr coefficients, Eigen::Vector4f Quat, geometry_utils::Transformation last_pose)
+{
+
+  Eigen::Vector3f NormaltoPlane;
+  NormaltoPlane[0] = coefficients->values[0]; //x-component
+  NormaltoPlane[1] = coefficients->values[1]; //y-component
+  NormaltoPlane[2] = coefficients->values[2]; //z-component
+  
+  float ax = atan2(sqrt(pow(NormaltoPlane[1],2)+pow(NormaltoPlane[2],2)),NormaltoPlane[0]);
+  float ay = atan2(sqrt(pow(NormaltoPlane[2],2)+pow(NormaltoPlane[0],2)),NormaltoPlane[1]);
+  
+  Eigen::Vector3f RotationVector;
+  Eigen::Vector3f X(1,0,0);
+  Eigen::Vector3f Y(0,1,0);
+  Eigen::Vector3f Z(0,0,1);
+  RotationVector = NormaltoPlane.cross(Z);
+  RotationVector = RotationVector/RotationVector.norm();
+  
+  float RotAngle = acos(NormaltoPlane.dot(Z)/RotationVector.norm());
+  
+  // Find Quaternion roatation angles from inertial frame to the plane 1-3
+  // Find Quaternion of the roatation vector
+  Quat[0] = cos(RotAngle/2);
+  Quat[1] = RotationVector[0] * sin(RotAngle/2);
+	Quat[2] = RotationVector[1] * sin(RotAngle/2);
+  Quat[3] = RotationVector[2] * sin(RotAngle/2);
+	
+  LOG(INFO) << "Quat X Y Z W :" << Quat[1] << Quat[2] << Quat[3] << Quat[0];
+  
+  
+  Eigen::Vector4f PlaneQuatInertial; 
+  PlaneinInertial(PlaneQuatInertial, last_pose, Quat);
+
+}
+
+void MapperEMVS::PlaneinInertial(Eigen::Vector4f PlaneQuatInertial, geometry_utils::Transformation last_pose, Eigen::Vector4f Quat)
+{
+  //Get Camera pose
+  kindr::minimal::RotationQuaternion CamPose = last_pose.getRotation();
+
+  //Rotate from camera frame to inertial frame 
+  PlaneQuatInertial[0] = Quat[0] * CamPose.w() - Quat[1] * CamPose.x() - Quat[2] * CamPose.y() - Quat[3] * CamPose.z();  // 1
+  PlaneQuatInertial[1] = Quat[0] * CamPose.x() + Quat[1] * CamPose.w() + Quat[2] * CamPose.z() - Quat[3] * CamPose.y();  // i
+  PlaneQuatInertial[2] = Quat[0] * CamPose.y() - Quat[1] * CamPose.z() + Quat[2] * CamPose.w() + Quat[3] * CamPose.x();  // j
+  PlaneQuatInertial[3] = Quat[0] * CamPose.z() + Quat[1] * CamPose.y() - Quat[2] * CamPose.x() + Quat[3] * CamPose.w();  // k
+
+  LOG(INFO) << "Quat W X Y Z in inertial frame :" << PlaneQuatInertial;
+  
 }
 
 }
