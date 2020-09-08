@@ -30,6 +30,7 @@
 #include <vtkAutoInit.h>
 #include<math.h> 
 
+
 namespace EMVS {
 
 typedef pcl::PointXYZI PointType;
@@ -114,12 +115,18 @@ public:
   void PCtoVoxelGrid(PointCloud::Ptr cloud, PointCloud::Ptr cloud_filtered);
 
   void FitPlanetoPC(PointCloud::Ptr cloud_filtered, PointCloud::Ptr cloud_p, geometry_utils::Transformation last_pose);
-  void PlaneRotation(pcl::ModelCoefficients::Ptr coefficients, Eigen::Vector4f Quat, geometry_utils::Transformation last_pose);
-  void PlaneinInertial(Eigen::Vector4f PlaneQuatInertial, geometry_utils::Transformation last_pose, Eigen::Vector4f Quat);
+  void PlaneRotationVector(pcl::ModelCoefficients::Ptr coefficients, geometry_utils::Transformation last_pose);
+  void PlaneinInertial(geometry_utils::Transformation last_pose, Eigen::Vector4f Quat);
+  void NavigatetoPlane(Eigen::Vector4d pc_, Eigen::Vector4f PlaneQuatInertial);
+
   Grid3D dsi_;
   
 
 private:
+
+  //Publisher
+  ros::NodeHandle ros_node_;
+  ros::Publisher cmd_pos_pub = ros_node_.advertise<geometry_msgs::Pose>("/ur_cmd_pose", 1);
 
   void setupDSI();
 
