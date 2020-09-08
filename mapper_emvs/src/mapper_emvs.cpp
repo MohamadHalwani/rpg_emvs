@@ -2,6 +2,9 @@
 #include <mapper_emvs/median_filtering.hpp>
 #include <pcl/filters/radius_outlier_removal.h>
 #include <geometry_msgs/PoseStamped.h>
+EMVS::PointCloud::Ptr cloud_filtered (new EMVS::PointCloud);
+
+
 namespace EMVS {
 
 using namespace geometry_utils;
@@ -339,7 +342,7 @@ void MapperEMVS::PCtoVoxelGrid(PointCloud::Ptr cloud, PointCloud::Ptr cloud_filt
   // Create the filtering object
   pcl::VoxelGrid<PointType> sor;
   sor.setInputCloud (cloud);
-  sor.setLeafSize (0.2f, 0.2f, 0.2f);
+  sor.setLeafSize (0.1f, 0.1f, 0.1f);
   sor.filter (*cloud_filtered);
 
   std::cerr << "PointCloud after filtering: " << cloud_filtered->width * cloud_filtered->height 
@@ -381,19 +384,19 @@ void MapperEMVS::FitPlanetoPC(PointCloud::Ptr cloud_filtered, PointCloud::Ptr cl
                                       << coefficients->values[2] << " " 
                                       << coefficients->values[3] << std::endl;
 
-  std::cerr << "Model inliers: " << inliers->indices.size () << std::endl;
-  for (std::size_t i = 0; i < inliers->indices.size (); ++i)
-  for (const auto& idx: inliers->indices)
-  std::cerr << idx << "    " << cloud_filtered->points[idx].x << " "
-                               << cloud_filtered->points[idx].y << " "
-                               << cloud_filtered->points[idx].z << std::endl;
+  // std::cerr << "Model inliers: " << inliers->indices.size () << std::endl;
+  // for (std::size_t i = 0; i < inliers->indices.size (); ++i)
+  // for (const auto& idx: inliers->indices)
+  // std::cerr << idx << "    " << cloud_filtered->points[idx].x << " "
+  //                              << cloud_filtered->points[idx].y << " "
+  //                              << cloud_filtered->points[idx].z << std::endl;
   
   // Find the rotation vector of the plane
-  Eigen::Vector4f RotationVectortoQuat;                
-  PlaneRotation(coefficients, RotationVectortoQuat, last_pose);
+                 
+  PlaneRotationVector(coefficients, last_pose);
 }
 
-void MapperEMVS::PlaneRotation(pcl::ModelCoefficients::Ptr coefficients, Eigen::Vector4f Quat, geometry_utils::Transformation last_pose)
+void MapperEMVS::PlaneRotationVector(pcl::ModelCoefficients::Ptr coefficients, geometry_utils::Transformation last_pose)
 {
 
   Eigen::Vector3f NormaltoPlane;
@@ -413,23 +416,27 @@ void MapperEMVS::PlaneRotation(pcl::ModelCoefficients::Ptr coefficients, Eigen::
   
   float RotAngle = acos(NormaltoPlane.dot(Z)/RotationVector.norm());
   
+  
   // Find Quaternion roatation angles from inertial frame to the plane 1-3
   // Find Quaternion of the roatation vector
+  Eigen::Vector4f Quat; 
   Quat[0] = cos(RotAngle/2);
   Quat[1] = RotationVector[0] * sin(RotAngle/2);
 	Quat[2] = RotationVector[1] * sin(RotAngle/2);
   Quat[3] = RotationVector[2] * sin(RotAngle/2);
-	
+
+	LOG(INFO) << "Rot Angle :" << RotAngle;
+  LOG(INFO) << "Rot Vector :" << RotationVector[0] << RotationVector[1] << RotationVector[2];
+  
   LOG(INFO) << "Quat X Y Z W :" << Quat[1] << Quat[2] << Quat[3] << Quat[0];
   
-  
-  Eigen::Vector4f PlaneQuatInertial; 
-  PlaneinInertial(PlaneQuatInertial, last_pose, Quat);
+  PlaneinInertial(last_pose, Quat);
 
 }
 
-void MapperEMVS::PlaneinInertial(Eigen::Vector4f PlaneQuatInertial, geometry_utils::Transformation last_pose, Eigen::Vector4f Quat)
+void MapperEMVS::PlaneinInertial(geometry_utils::Transformation last_pose, Eigen::Vector4f Quat)
 {
+  Eigen::Vector4f PlaneQuatInertial;
   //Get Camera pose
   kindr::minimal::RotationQuaternion CamPose = last_pose.getRotation();
 
@@ -441,6 +448,37 @@ void MapperEMVS::PlaneinInertial(Eigen::Vector4f PlaneQuatInertial, geometry_uti
 
   LOG(INFO) << "Quat W X Y Z in inertial frame :" << PlaneQuatInertial;
   
+  Eigen::Matrix4d TransformationMat = last_pose.getTransformationMatrix();
+  Eigen::Vector4d pcinCamFrame;
+  pcinCamFrame[0] = cloud_filtered->points[0].x;
+  pcinCamFrame[1] = cloud_filtered->points[0].y;
+  pcinCamFrame[2] = cloud_filtered->points[0].z;
+  pcinCamFrame[3] = 1.0;
+
+  Eigen::Vector4d pcinInertialFrame = TransformationMat*pcinCamFrame;
+
+  LOG(INFO) << "PC camera frame :" << pcinCamFrame;
+  LOG(INFO) << "PC inertial frame :" << pcinInertialFrame;
+
+  NavigatetoPlane(pcinInertialFrame, PlaneQuatInertial);
+
+}
+
+void MapperEMVS::NavigatetoPlane(Eigen::Vector4d pc_, Eigen::Vector4f PlaneQuatInertial)
+{
+  geometry_msgs::Pose Pose;
+  Pose.position.x = pc_[0];
+  Pose.position.y = pc_[1];
+  Pose.position.z = pc_[2] + 0.1;
+  Pose.orientation.x = PlaneQuatInertial[1];
+  Pose.orientation.y = PlaneQuatInertial[2];
+  Pose.orientation.z = PlaneQuatInertial[3];
+  Pose.orientation.w = PlaneQuatInertial[0];
+
+  LOG(INFO) << " Pose message :" << Pose.orientation.x << Pose.orientation.y << Pose.orientation.z << Pose.orientation.w;
+  
+  this->cmd_pos_pub.publish(Pose);
+
 }
 
 }
