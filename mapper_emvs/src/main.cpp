@@ -4,10 +4,20 @@
 #include <image_geometry/pinhole_camera_model.h>
 
 #include <opencv2/highgui/highgui.hpp>
+#include <pcl/common/common_headers.h>
 #include <pcl/io/pcd_io.h>
+#include <pcl/point_types.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/pcl_base.h>
+#include <pcl/visualization/pcl_visualizer.h>
+#include <pcl/ModelCoefficients.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/visualization/cloud_viewer.h>
+#include <pcl/filters/extract_indices.h>
 
-#include <gflags/gflags.h>
-#include <glog/logging.h>
+#include <vtkAutoInit.h>
 
 #include <chrono>
 
@@ -41,6 +51,7 @@ DEFINE_double(radius_search, 0.05, "Size of the radius filter. (default: 0.05)")
 DEFINE_int32(min_num_neighbors, 3, "Minimum number of points for the radius filter. (default: 3)");
 
 
+
 /*
  * Load a set of events and poses from a rosbag,
  * compute the disparity space image (DSI),
@@ -49,8 +60,8 @@ DEFINE_int32(min_num_neighbors, 3, "Minimum number of points for the radius filt
  */
 int main(int argc, char** argv)
 {
-  //ros::init(argc, argv, "emvs");
- // ros::NodeHandle nh_;
+  ros::init(argc, argv, "emvs");
+  ros::NodeHandle nh_;
   
   google::InitGoogleLogging(argv[0]);
   google::ParseCommandLineFlags(&argc, &argv, true);
@@ -64,7 +75,8 @@ int main(int argc, char** argv)
   std::map<ros::Time, geometry_utils::Transformation> poses;
   data_loading::parse_rosbag(FLAGS_bag_filename, events, poses, camera_info_msg,
                              FLAGS_event_topic, FLAGS_camera_info_topic, FLAGS_pose_topic, FLAGS_start_time_s, FLAGS_stop_time_s);
-  
+ 
+
   // Create a camera object from the loaded intrinsic parameters
   image_geometry::PinholeCameraModel cam;
   // camera_info_msg.width = 240;
@@ -150,12 +162,34 @@ int main(int argc, char** argv)
   // Save point cloud to disk
   pcl::io::savePCDFileASCII ("pointcloud.pcd", *pc);
   LOG(INFO) << "Saved " << pc->points.size () << " data points to pointcloud.pcd";
-  for (int i=0; i< pc->points.size(); i++)
-  {
-    ROS_INFO("point %d, x: %f, y: %f, z: %f", i, pc->points[i].x, pc->points[i].y, pc->points[i].z);
-  }
+  // for (int i=0; i< pc->points.size(); i++)
+  // {
+  //   ROS_INFO("point %d, x: %f, y: %f, z: %f", i, pc->points[i].x, pc->points[i].y, pc->points[i].z);
+  // }
+
+  // Convert Point Clouds to Voxel Grid
+  EMVS::PointCloud::Ptr cloud_filtered (new EMVS::PointCloud);
+  float leaf_size_x = 0.1;
+  float leaf_size_y = 0.1;
+  float leaf_size_z = 0.1;
+  mapper.PCtoVoxelGrid(pc, cloud_filtered, leaf_size_x, leaf_size_y, leaf_size_z);
+
+
+  EMVS::PointCloud::Ptr cloud_p (new EMVS::PointCloud);
+  geometry_utils::Transformation last_pose = poses.at(t1_);
+  pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
+  mapper.FitPlanetoPC(cloud_filtered, cloud_p, coefficients);
+  
+  Eigen::Vector4f Quat;
+  mapper.PlaneRotationVector(coefficients, last_pose, Quat);
+  Eigen::Vector4d pcinInertialFrame;
+  Eigen::Vector4f PlaneQuatInertial;
+  mapper.PlaneinInertial(cloud_filtered, last_pose, Quat, pcinInertialFrame, PlaneQuatInertial);
+  mapper.NavigatetoPlane(pcinInertialFrame, PlaneQuatInertial);
+
+
   //ros::Publisher point_cloud_pub = nh_.advertise<EMVS::PointCloud::Ptr>("/emvs_point_cloud", 1);
- // point_cloud_pub.publish(pc->points[i].x,);
-  //ros::spin();
+  // point_cloud_pub.publish(pc->points[i].x,);
+  ros::spin();
   return 0;
 }
