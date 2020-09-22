@@ -114,10 +114,10 @@ public:
 
   void PCtoVoxelGrid(PointCloud::Ptr cloud, PointCloud::Ptr cloud_filtered, float leaf_size_x, float leaf_size_y, float leaf_size_z);
 
-  void FitPlanetoPC(PointCloud::Ptr cloud_filtered, PointCloud::Ptr cloud_p, pcl::ModelCoefficients::Ptr coefficients);
-  void PlaneRotationVector(pcl::ModelCoefficients::Ptr coefficients, geometry_utils::Transformation last_pose, Eigen::Vector4f& Quat);
-  void PlaneinInertial(PointCloud::Ptr cloud_filtered, geometry_utils::Transformation last_pose, Eigen::Vector4f Quat, Eigen::Vector4d& pcinInertialFrame, Eigen::Vector4f& PlaneQuatInertial);
-  void NavigatetoPlane(Eigen::Vector4d pc_, Eigen::Vector4f PlaneQuatInertial);
+  // void FitPlanetoPC(PointCloud::Ptr cloud_filtered, PointCloud::Ptr cloud_p, pcl::ModelCoefficients::Ptr coefficients);
+  // void PlaneRotationVector(pcl::ModelCoefficients::Ptr coefficients, geometry_utils::Transformation last_pose, Eigen::Vector4f& Quat);
+  // void PlaneinInertial(PointCloud::Ptr cloud_UNfiltered, PointCloud::Ptr cloud_filtered, geometry_utils::Transformation last_pose, Eigen::Vector4f Quat, Eigen::Vector4d& pcinInertialFrame, Eigen::Vector4f& PlaneQuatInertial, Eigen::Vector4d& UNfilteredPCInertial);
+  // void NavigatetoPlane(Eigen::Vector4d pc_, Eigen::Vector4f PlaneQuatInertial);
 
   
 
@@ -163,5 +163,6 @@ private:
   const size_t packet_size_ = 246;
 
 };
+
 
 }
