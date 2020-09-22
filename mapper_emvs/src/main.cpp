@@ -1,5 +1,6 @@
 #include <mapper_emvs/data_loading.hpp>
 #include <mapper_emvs/mapper_emvs.hpp>
+#include <mapper_emvs/pc_geometry.hpp>
 
 #include <image_geometry/pinhole_camera_model.h>
 
@@ -23,6 +24,11 @@
 
 #include "ros/ros.h"
 #include "std_msgs/String.h"
+
+#include "geometry_msgs/Point.h"
+
+#include "Mission_Management/my_msg.h"
+#include <vector>
 
 
 // Input parameters
@@ -174,18 +180,30 @@ int main(int argc, char** argv)
   float leaf_size_z = 0.1;
   mapper.PCtoVoxelGrid(pc, cloud_filtered, leaf_size_x, leaf_size_y, leaf_size_z);
 
-
+  //Intialize PCGeometry
+  EMVS::PCGeometry geo;
   EMVS::PointCloud::Ptr cloud_p (new EMVS::PointCloud);
   geometry_utils::Transformation last_pose = poses.at(t1_);
   pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
-  mapper.FitPlanetoPC(cloud_filtered, cloud_p, coefficients);
+  geo.FitPlanetoPC(cloud_filtered, cloud_p, coefficients);
   
   Eigen::Vector4f Quat;
-  mapper.PlaneRotationVector(coefficients, last_pose, Quat);
-  Eigen::Vector4d pcinInertialFrame;
+  geo.PlaneRotationVector(coefficients, last_pose, Quat);
+  // Eigen::Vector4d UNfilteredPCInertial;
+  // Eigen::Vector4d pcinInertialFrame;
+  // Eigen::MatrixXd UNfilteredPCInertial;
+  // Eigen::MatrixXd pcinInertialFrame;
+  // UNfilteredPCInertial.conservativeResize(4, pc->size());
+  // pcinInertialFrame.conservativeResize(4, cloud_filtered->size());
+  geometry_msgs::Point PCInertial[cloud_filtered->size()];
+  geometry_msgs::Point point;
   Eigen::Vector4f PlaneQuatInertial;
-  mapper.PlaneinInertial(cloud_filtered, last_pose, Quat, pcinInertialFrame, PlaneQuatInertial);
-  mapper.NavigatetoPlane(pcinInertialFrame, PlaneQuatInertial);
+  for(int i=0; i < cloud_filtered->size(); i++)
+  {
+    geo.PlaneinInertial(pc, cloud_filtered, last_pose, Quat, PlaneQuatInertial, point, i);
+    PCInertial[i] = point;
+  }
+  //geo.NavigatetoPlane(pcinInertialFrame, PlaneQuatInertial);
 
 
   //ros::Publisher point_cloud_pub = nh_.advertise<EMVS::PointCloud::Ptr>("/emvs_point_cloud", 1);
